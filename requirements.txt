@@ -1,0 +1,20 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+numpy
+
+google-generativeai
+langchain-google-genai
+sentence-transformers
+
+qdrant-client
+unstructured
+python-pptx
+python-docx
+pypdf
+beautifulsoup4
+pdfplumber
+
+logfire[fastapi, requests]
+loguru
