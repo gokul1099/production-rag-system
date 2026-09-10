@@ -1,6 +1,8 @@
 import time
 import logfire
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+from langchain_openai import OpenAI
 from app.config import setting
 from sentence_transformers import SentenceTransformer
 
@@ -14,9 +16,8 @@ _model_type = None
 def _probe_gemini():
     """Try one embed call to verfiy Gemini is reachable. Returns model or None"""
     try:
-        model = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-2-preview",
-            google_api_key=setting.GEMINI_API_KEYS
+        model = NVIDIAEmbeddings(
+            model="nemotron-3-embed-1b",
         )
         model.embed_query("probe")
         logfire.info("Gemini embeddings ready (gemini-embedding-2-preview, 3072-dim)")

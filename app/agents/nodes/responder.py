@@ -3,7 +3,7 @@ from app.agents.state import AgentState
 from app.config import setting
 from langchain_groq import ChatGroq
 
-llm = ChatGroq(api_key=setting.GROQ_API_KEY, model=setting.GROQ_MODEL, temperature=0.8)
+llm = ChatGroq(api_key=setting.GROQ_API_KEY, model=setting.GROQ_MODEL)
 def generate_node(state: AgentState):
     """
     Synthesizes a response using both Documentation Context and Conversation History

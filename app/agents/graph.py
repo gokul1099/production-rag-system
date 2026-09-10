@@ -9,8 +9,8 @@ from app.agents.nodes.responder import generate_node
 workflow = StateGraph(AgentState)
 
 workflow.add_node("planner", planner_node)
-workflow.add_node("retrieved", retrieve_node)
-workflow.add_node("responsed", generate_node)
+workflow.add_node("retriever", retrieve_node)
+workflow.add_node("responder", generate_node)
 
 
 def route_planner(state: AgentState):

@@ -1,2 +1,6 @@
 .env
 /processed_data/
+**/__pycache__/
+**/*.py[cod]
+*.pyo
+*.pyd
