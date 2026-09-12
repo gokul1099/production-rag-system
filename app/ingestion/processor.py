@@ -4,7 +4,7 @@ import uuid
 import json
 import logfire
 
-from qdrant_client import QdrantClient
+from app.services.retrieval.qdrant_service import client as qdrant_client
 from qdrant_client.http import models
 
 from app.config import setting
@@ -21,10 +21,6 @@ clean_args = sys.argv[1:]
 
 PROCESSED_DATA_DIR = "processed_data"
 
-qdrant_client = QdrantClient(
-    url=setting.QDRANT_CLUSTER_ENDPOINT,
-    api_key=setting.QDRANT_API_KEY
-)
 
 def save_processed_locally(data: dict, source_type: str, filename: str) -> str:
     """Save parsed chunk metadata as JSON in processed_data/<source_type>/"""
@@ -88,7 +84,7 @@ def process_file(file_path: str, filename: str, source_type: str):
                 logfire.info(f"Indexed {len(points)} points to QDrant from {filename}")
 
         except Exception as e:
-            logfire.info(f"Error during processing directory for {file_path}", e)
+            logfire.info(f"Error during processing directory for {file_path} : {e}")
 
 def process_directory(dir_path: str, source_type: str):
     """Process every file in a directory"""

@@ -7,7 +7,7 @@ from app.config import setting
 from sentence_transformers import SentenceTransformer
 
 BATCH_SIZE = 50
-_GEMINI_DIM = 3072
+_NVIDIA_DIM = 2048
 _FALLBACK_DIM = 768
 
 _active_model = None
@@ -17,12 +17,13 @@ def _probe_gemini():
     """Try one embed call to verfiy Gemini is reachable. Returns model or None"""
     try:
         model = NVIDIAEmbeddings(
-            model="nemotron-3-embed-1b",
+            model=setting.NVIDIA_EMBEDDING_MODEL,
         )
         model.embed_query("probe")
-        logfire.info("Gemini embeddings ready (gemini-embedding-2-preview, 3072-dim)")
+        logfire.info(f"Nvidia embeddings ready ({setting.NVIDIA_EMBEDDING_MODEL}, {_NVIDIA_DIM})")
         return model
     except Exception as e:
+        print(e)
         logfire.warning(f"Gemini probe failed: {e}. Will use sentence-transformers fallback")
         return None
 
@@ -47,7 +48,7 @@ def _init():
 def get_embedding_dim()-> int:
     """Return the vector dimension for the active model. Call after _init()"""
     _init()
-    return _GEMINI_DIM if _model_type == "gemini" else _FALLBACK_DIM
+    return _NVIDIA_DIM if _model_type == "gemini" else _FALLBACK_DIM
 
 def _embed_bacth(batch: list[str]) -> list[list[float]]:
     if _model_type == "gemini":
@@ -65,7 +66,7 @@ def _embed_bacth(batch: list[str]) -> list[list[float]]:
                     )
                     time.sleep(wait)
                 else:
-                    logfire.error("Gemini embedding failed: {e}")
+                    logfire.error(f"Gemini embedding failed: {e}")
                     raise
         raise RuntimeError("Gemini rate limit persisted after 4 attempts")
     else:

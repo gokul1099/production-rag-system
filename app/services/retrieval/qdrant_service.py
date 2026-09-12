@@ -5,9 +5,10 @@ from app.config import setting
 from app.services.retrieval.embedding import embed_query
 
 client = QdrantClient(
-    url=setting.QDRANT_CLUSTER_ENDPOINT,
+    url="http://localhost:6333",
     api_key=setting.QDRANT_API_KEY,
-)
+    check_compatibility=False
+)   
 
 def seaech_enterprice_knowledge(query:str, limit: int= 8):
     """
@@ -32,8 +33,7 @@ def seaech_enterprice_knowledge(query:str, limit: int= 8):
                 "score": res.score
             })
 
-            return results
+        return results
     except Exception as e:
         logfire.error(f"❌ Qdrant search failed: {e}")
         return []
-    

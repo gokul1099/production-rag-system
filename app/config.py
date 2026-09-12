@@ -11,6 +11,7 @@ class Settings:
     QDRANT_COLLECTION = "enterprise_rag"
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     NVIDIA_API_KEY= os.getenv("NVIDIA_API_KEY")
+    NVIDIA_EMBEDDING_MODEL= "nvidia/nemotron-3-embed-1b"
     # Use a Groq model that is commonly available on Groq; override with GROQ_MODEL in .env if needed.
     GROQ_MODEL = "qwen/qwen3.8-27b"
 
