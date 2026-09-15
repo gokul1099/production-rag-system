@@ -82,9 +82,11 @@ def process_file(file_path: str, filename: str, source_type: str):
                     points=points
                 )
                 logfire.info(f"Indexed {len(points)} points to QDrant from {filename}")
+            return True
 
         except Exception as e:
             logfire.info(f"Error during processing directory for {file_path} : {e}")
+            return False
 
 def process_directory(dir_path: str, source_type: str):
     """Process every file in a directory"""

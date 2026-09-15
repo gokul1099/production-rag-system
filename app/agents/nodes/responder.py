@@ -13,7 +13,7 @@ def generate_node(state: AgentState):
 
     for msg in state["messages"]:
         role = "User" if msg["role"] == "user" else "Assistant"
-        history_str += f"{role}: {msg["content"]}\n"
+        history_str += f"{role}: {msg['content']}\n"
 
     user_msg = state["messages"][-1]["content"] if state["messages"] else ""
 

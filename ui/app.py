@@ -43,6 +43,40 @@ with st.sidebar:
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
     st.info(f"Memory ID: {st.session_state.session_id[:8]}")
+
+    st.subheader("Upload document")
+    uploaded_file = st.file_uploader(
+        "Choose a document",
+        type=["txt", "pdf", "doc", "docx", "ppt", "pptx"],
+        accept_multiple_files=False,
+    )
+    if st.button("Upload", width="stretch", disabled=uploaded_file is None):
+        upload_session_id = str(uuid.uuid4())
+        base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        upload_url = f"{base_url}/upload"
+
+        try:
+            file_bytes = uploaded_file.getvalue()
+            files = {
+                "file": (
+                    uploaded_file.name,
+                    file_bytes,
+                    uploaded_file.type or "application/octet-stream",
+                )
+            }
+            response = requests.post(
+                upload_url,
+                files=files,
+                data={"session_id": upload_session_id},
+                timeout=120,
+            )
+            response.raise_for_status()
+            st.success(f"Uploaded {uploaded_file.name}")
+        except requests.RequestException as e:
+            print(e,"error during uploading")
+            logfire.error(f"Document upload failed: {e}")
+            st.error(f"Upload failed. Check that the backend is running. {e}")
+
     if st.button("🗑️ Clear history and memory", width="stretch", type="primary"):
         logfire.warn(f"🗑️ Memory wipe triggered for session: {st.session_state.session_id[:8]}")
         st.session_state.messages = []
@@ -81,7 +115,7 @@ if prompt := st.chat_input("Ask about your documents"):
                     if sources:
                         with st.expander("📄 View Retrieved Context (Sources)"):
                             for i, source in enumerate(sources):
-                                preview = sources[:100].replace("\n", " ")+ "..."
+                                preview = str(source)[:100].replace("\n", " ") + "..."
                                 with st.expander(f"Chunk {i+1}: {preview}"):
                                     st.info(source)
                 except Exception as e:
