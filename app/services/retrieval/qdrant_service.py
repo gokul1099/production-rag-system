@@ -2,13 +2,35 @@ import logfire
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from app.config import setting
-from app.services.retrieval.embedding import embed_query
+from app.services.retrieval.embedding import embed_query, get_embedding_dim
 
 client = QdrantClient(
     url="http://localhost:6333",
     api_key=setting.QDRANT_API_KEY,
     check_compatibility=False
-)   
+)
+
+
+def ensure_collection_exists(collection_name: str) -> None:
+    """Create the collection if it does not already exist."""
+    try:
+        exists = client.collection_exists(collection_name)
+    except Exception as exc:
+        raise RuntimeError(f"Qdrant is not reachable at localhost:6333: {exc}") from exc
+
+    if exists:
+        return
+
+    dim = get_embedding_dim()
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config=models.VectorParams(
+            size=dim,
+            distance=models.Distance.COSINE,
+        ),
+    )
+    logfire.info(f"Created missing Qdrant collection '{collection_name}' ({dim}-dim, Cosine)")
+
 
 def seaech_enterprice_knowledge(query:str, limit: int= 8):
     """

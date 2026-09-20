@@ -8,7 +8,7 @@ logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), scrubbing=False)
 
 from fastapi import FastAPI, Response, UploadFile, File, Form, HTTPException
 from app.agents.graph import rag_agent
-from models import QueryRequest, UploadRequest
+from app.models import QueryRequest, UploadRequest
 from app.ingestion.processor import process_file
 
 app = FastAPI(title="Enterprise Agentic RAG API")

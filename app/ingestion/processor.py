@@ -4,7 +4,7 @@ import uuid
 import json
 import logfire
 
-from app.services.retrieval.qdrant_service import client as qdrant_client
+from app.services.retrieval.qdrant_service import client as qdrant_client, ensure_collection_exists
 from qdrant_client.http import models
 
 from app.config import setting
@@ -63,6 +63,7 @@ def process_file(file_path: str, filename: str, source_type: str):
             logfire.info(f"Saved processed data -> {local_path}")
 
             with logfire.span("Vectorizing & Indexing"):
+                ensure_collection_exists(setting.QDRANT_COLLECTION)
                 embeddings = _embed_texts(chunks)
                 points = [
                     models.PointStruct(
