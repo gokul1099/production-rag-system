@@ -1,0 +1,36 @@
+FROM python:3.13-slim
+
+# Set working directory
+WORKDIR /app
+
+# Environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies required by some Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pyproject first for layer caching
+COPY pyproject.toml .
+
+# Install Python dependencies declared in pyproject
+RUN pip install --upgrade pip && \
+    pip install .
+
+# Copy the application code
+COPY . .
+
+# Expose gateway port
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8001/ || exit 1
+
+# Run the gateway with Uvicorn
+CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8001"]

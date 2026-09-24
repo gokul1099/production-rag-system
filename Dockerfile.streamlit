@@ -1,0 +1,37 @@
+# Use Python 3.13 as base image
+FROM python:3.13-slim
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pyproject.toml for dependency installation
+COPY pyproject.toml .
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install .
+
+# Copy the entire project
+COPY . .
+
+# Expose port for Streamlit
+EXPOSE 8501
+
+# Health check for Streamlit
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Run Streamlit application
+CMD ["streamlit", "run", "ui/app.py", "--server.port=8501", "--server.address=0.0.0.0"]

@@ -37,12 +37,70 @@ if "session_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Auth state
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+    st.session_state.user_id = None
+    st.session_state.logged_in = False
+
 
 with st.sidebar:
     st.title("🧠 Agent OS")
     st.markdown("---")
     st.success(f"Logfire: {LOGFIRE_STATUS}")
     st.info(f"Memory ID: {st.session_state.session_id[:8]}")
+
+    # --- Authentication ---
+    st.subheader("Account")
+    base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+    if not st.session_state.access_token:
+        email = st.text_input("Email", key="auth_email")
+        password = st.text_input("Password", type="password", key="auth_password")
+        col1, col2 = st.columns(2)
+        if col1.button("Sign In"):
+            try:
+                url = f"{base_url}/auth/signin"
+                resp = requests.post(url, json={"email": email, "password": password}, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    st.session_state.access_token = token
+                    st.session_state.user_id = data.get("user_id")
+                    st.session_state.logged_in = True
+                    st.success("Signed in successfully")
+                    st.experimental_rerun()
+                else:
+                    st.error("Signin failed: no token returned")
+            except requests.RequestException as e:
+                logfire.error(f"Signin failed: {e}")
+                st.error(f"Signin failed: {e}")
+
+        if col2.button("Sign Up"):
+            try:
+                url = f"{base_url}/auth/signup"
+                resp = requests.post(url, json={"email": email, "password": password}, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                token = data.get("access_token")
+                if token:
+                    st.session_state.access_token = token
+                    st.session_state.user_id = data.get("user_id")
+                    st.session_state.logged_in = True
+                    st.success("Account created and signed in")
+                    st.experimental_rerun()
+                else:
+                    st.success("Account created")
+            except requests.RequestException as e:
+                logfire.error(f"Signup failed: {e}")
+                st.error(f"Signup failed: {e}")
+    else:
+        st.success(f"Logged in (id: {st.session_state.user_id})")
+        if st.button("Logout"):
+            st.session_state.access_token = None
+            st.session_state.user_id = None
+            st.session_state.logged_in = False
+            st.experimental_rerun()
 
     st.subheader("Upload document")
     uploaded_file = st.file_uploader(
@@ -64,10 +122,15 @@ with st.sidebar:
                     uploaded_file.type or "application/octet-stream",
                 )
             }
+            headers = {}
+            if st.session_state.access_token:
+                headers["Authorization"] = f"Bearer {st.session_state.access_token}"
+
             response = requests.post(
                 upload_url,
                 files=files,
                 data={"session_id": upload_session_id},
+                headers=headers,
                 timeout=120,
             )
             response.raise_for_status()
@@ -103,7 +166,10 @@ if prompt := st.chat_input("Ask about your documents"):
                         base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
                         url = f"{base_url}/query"
                         payload = {"q": prompt, "thread_id": st.session_state.session_id}
-                        response = requests.post(url, json=payload, timeout=60)
+                        headers = {}
+                        if st.session_state.access_token:
+                            headers["Authorization"] = f"Bearer {st.session_state.access_token}"
+                        response = requests.post(url, json=payload, headers=headers, timeout=60)
                         data = response.json()
 
                     steps = data.get("thought_process", [])

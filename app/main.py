@@ -10,8 +10,12 @@ from fastapi import FastAPI, Response, UploadFile, File, Form, HTTPException
 from app.agents.graph import rag_agent
 from app.models import QueryRequest, UploadRequest
 from app.ingestion.processor import process_file
+from app.auth import router as auth_router
 
 app = FastAPI(title="Enterprise Agentic RAG API")
+
+# Authentication routes (signup/signin)
+app.include_router(auth_router, prefix="/auth")
 
 @app.get("/")
 def home():

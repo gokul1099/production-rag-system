@@ -1,0 +1,78 @@
+version: '1'
+
+services:
+  #Fastapi backend service
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: prod-rag-api
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGFIRE_TOKEN=${LOGFIRE_TOKEN}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}
+    volumes:
+      - ./processed_data:/app/processed_data
+    networks:
+    - rag-network
+    restart: unless-stopped
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: prod-rag-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      # Qdrant Cloud configuration
+      - QDRANT_CLUSTER_ENDPOINT=${QDRANT_CLUSTER_ENDPOINT}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - BACKEND_URL=http://gateway:8001
+    volumes:
+      - ./DATA:/app/DATA
+      - ./processed_data:/app/processed_data
+    depends_on:
+      - api
+      - gateway
+    networks:
+      - rag-network
+    restart: unless-stopped
+    command: streamlit run ui/app.py --server.port=8501 --server.address=0.0.0.0
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: prod-rag-gateway
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGFIRE_TOKEN=${LOGFIRE_TOKEN}
+      - BACKEND_API_URL=http://api:8000
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - GATEWAY_HTTP_TIMEOUT=${GATEWAY_HTTP_TIMEOUT:-30}
+      - GATEWAY_RATE_LIMIT_REQUESTS=${GATEWAY_RATE_LIMIT_REQUESTS:-100}
+      - GATE_LIMIT_WINDOW_SECONDS=${GATE_LIMIT_WINDOW_SECONDS:-60}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      - api
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+networks:
+  rag-network:
+    driver: bridge
+
