@@ -15,5 +15,8 @@ class Settings:
     # Use a Groq model that is commonly available on Groq; override with GROQ_MODEL in .env if needed.
     GROQ_MODEL = "qwen/qwen3.8-27b"
 
+    GCP_PROJECT_ID=os.getenv("GCP_PROJECT_ID")
+    GCS_BUCKET_NAME=os.getenv("GCS_BUCKET_NAME")
+
 setting = Settings()
 

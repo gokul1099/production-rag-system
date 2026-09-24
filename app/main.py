@@ -5,12 +5,16 @@ from pathlib import Path
 import tempfile
 load_dotenv()
 logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), scrubbing=False)
-
-from fastapi import FastAPI, Response, UploadFile, File, Form, HTTPException
+import asyncio
+from fastapi import FastAPI, Response, UploadFile, File, Form, HTTPException, Request
 from app.agents.graph import rag_agent
 from app.models import QueryRequest, UploadRequest
-from app.ingestion.processor import process_file
 from app.auth import router as auth_router
+from app.ingestion.processor import process_gcs_file
+from app.services.gcp.gcs_utils import gcs_service
+import base64
+import json
+
 
 app = FastAPI(title="Enterprise Agentic RAG API")
 
@@ -33,6 +37,43 @@ def get_graph_images():
     except Exception as e:
         return {"error": f"Could not generate graph image: {e}"}
 
+@app.post("/pubsub/ingest")
+async def handle_pubsub_ingest(request: Request):
+    """
+    HTTP push endpoint triggered automatically by google pub/sub event
+    triggered when OBJECT_FIANALIZE upload event is triggered
+    """
+
+    try:
+        body = await request.json()
+        message = body.get("message", {})
+
+        if not message or "data" not in message:
+            raise HTTPException(status_code=400, detail="Invalid pub/sub payload: missing message.data")
+
+        decoded_bytes = base64.b64decode(message["data"])
+        event_info = json.loads(decoded_bytes.decode("utf-8"))
+        bucket_name = event_info.get("bucket")
+        file_name = event_info.get("name")
+
+        logfire.info(f"📥 Pub/Sub event received for file gcs://{bucket_name}/{file_name}")
+        if not file_name or not file_name.endswith("/"):
+            return {"status": "ignored", "reason": "Directory object"}
+        parts = file_name.split("/")
+        source_type = parts[0] if len(parts) > 1 else "upload"
+
+        ingestion_success = asyncio.to_thread(process_gcs_file, file_name, source_type)
+
+        if not ingestion_success:
+            raise HTTPException(status_code=500, detail=f"Failed to ingest file form GCS due to: {file_name}")
+        return {
+            "status": "success",
+            "file_name" : file_name
+        }
+    except Exception as e :
+        logfire.error(f"Failed to ingest doc from GCS - {file_name} due to : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/upload")
 async def upload_files(file: UploadFile = File(...), session_id: str = Form(...)):
     support_extensions = [".pdf",".docx", ".ppt", ".txt"]
@@ -44,26 +85,21 @@ async def upload_files(file: UploadFile = File(...), session_id: str = Form(...)
 
     if not session_id.strip():
         raise HTTPException(status_code=422, detail="Session id not found")
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=extension, delete= False) as temporary_file:
-            temporary_path = temporary_file.name
-            while chunk := await file.read(1024 * 1024):
-                temporary_file.write(chunk)
-        indexed = process_file(temporary_path, file_name, "upload")
-        if not indexed:
-            raise HTTPException(status_code=422, detail="The document could not be parsed or indexed") 
 
-        return {
-            "filename": file_name,
-            "session_id": session_id.strip(),
-            "status": "indexed"
-        }       
-    finally:
-        await file.close()
-        if temporary_path:
-            os.unlink(temporary_path)
-
+    file_bytes = await file.read()
+    destination_path = f"uploads/{file_name}"
+    gcs_uri = await asyncio.to_thread(
+        gcs_service.upload_file,
+        source=file_bytes,
+        destination_blob_name=destination_path,
+        content_type=file.content_type
+    )
+    return {
+        "filename": file_name,
+        "session_id": session_id.strip(),
+        "gcs_uri": gcs_uri,
+        "status": "uploaded_to_gcs"
+    }
 
 @app.post("/query")
 def query(request: QueryRequest):

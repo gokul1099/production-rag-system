@@ -3,10 +3,10 @@ import sys
 import uuid
 import json
 import logfire
-
+from pathlib import Path
 from app.services.retrieval.qdrant_service import client as qdrant_client, ensure_collection_exists
 from qdrant_client.http import models
-
+import tempfile
 from app.config import setting
 from app.services.retrieval.embedding import _embed_texts, get_embedding_dim
 from app.ingestion.loaders.pdf import parse_pdf
@@ -14,7 +14,7 @@ from app.ingestion.loaders.text import parse_text
 from app.ingestion.loaders.html import parse_html
 from app.ingestion.loaders.office import parse_office
 from app.ingestion.chunking.splitter import chunk_text
-
+from app.services.gcp.gcs_utils import gcs_service
 logfire.configure(service_name="enterprice-ingestion-service")
 
 clean_args = sys.argv[1:]
@@ -88,6 +88,26 @@ def process_file(file_path: str, filename: str, source_type: str):
         except Exception as e:
             logfire.info(f"Error during processing directory for {file_path} : {e}")
             return False
+
+def process_gcs_file(blob_name: str ,source_type: str = "upload"):
+    with logfire.span(f"Processing uploaded file from GCS for ingestion : {blob_name} - {source_type}"):
+        filename = Path(blob_name).name
+        ext = Path(filename).suffix.lower()
+        try:
+            file_bytes = gcs_service.download_file_bytes(blob_name)
+            with tempfile.NamedTemporaryFile(suffix=ext, ) as temp_blob_bytes:
+                temp_blob_bytes.write(file_bytes)
+                temp_blob_path = temp_blob_bytes.name()
+            try:
+                processed = process_file(temp_blob_path, filename, source_type)
+                return processed
+            finally:
+                if os.path.exists(temp_blob_path):
+                    os.unlink(temp_blob_path)
+        except Exception as e:
+            logfire.error(f"process_gcs_file - failed:  The ingestion failed due to {e}")
+            return False
+
 
 def process_directory(dir_path: str, source_type: str):
     """Process every file in a directory"""

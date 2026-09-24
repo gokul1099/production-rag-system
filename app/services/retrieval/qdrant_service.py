@@ -5,7 +5,7 @@ from app.config import setting
 from app.services.retrieval.embedding import embed_query, get_embedding_dim
 
 client = QdrantClient(
-    url="http://localhost:6333",
+    url=setting.QDRANT_CLUSTER_ENDPOINT,
     api_key=setting.QDRANT_API_KEY,
     check_compatibility=False
 )
