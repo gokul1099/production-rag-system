@@ -19,10 +19,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
         self._requests: Dict[str, Deque[float]] = {}
-        self.public_endpoints = ["/docs", "/redoc", '/health']
+        self.public_endpoints = ["/", "/docs", "/redoc", "/openapi.json", "/health", "/favicon.ico", "/auth/signup", "/auth/signin"]
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path is self.public_endpoints:
+        normalized_path = request.url.path.rstrip('/') or '/'
+        if request.url.path in self.public_endpoints or normalized_path in self.public_endpoints or normalized_path.startswith('/auth'):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")

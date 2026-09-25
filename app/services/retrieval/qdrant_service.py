@@ -16,7 +16,7 @@ def ensure_collection_exists(collection_name: str) -> None:
     try:
         exists = client.collection_exists(collection_name)
     except Exception as exc:
-        raise RuntimeError(f"Qdrant is not reachable at localhost:6333: {exc}") from exc
+        raise RuntimeError(f"Qdrant is not reachable at {setting.QDRANT_CLUSTER_ENDPOINT}: {exc}") from exc
 
     if exists:
         return

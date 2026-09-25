@@ -69,7 +69,6 @@ with st.sidebar:
                     st.session_state.user_id = data.get("user_id")
                     st.session_state.logged_in = True
                     st.success("Signed in successfully")
-                    st.experimental_rerun()
                 else:
                     st.error("Signin failed: no token returned")
             except requests.RequestException as e:
@@ -88,7 +87,6 @@ with st.sidebar:
                     st.session_state.user_id = data.get("user_id")
                     st.session_state.logged_in = True
                     st.success("Account created and signed in")
-                    st.experimental_rerun()
                 else:
                     st.success("Account created")
             except requests.RequestException as e:
@@ -100,7 +98,6 @@ with st.sidebar:
             st.session_state.access_token = None
             st.session_state.user_id = None
             st.session_state.logged_in = False
-            st.experimental_rerun()
 
     st.subheader("Upload document")
     uploaded_file = st.file_uploader(

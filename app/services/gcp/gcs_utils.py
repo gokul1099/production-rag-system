@@ -13,14 +13,30 @@ class GCSService:
     """
 
     def __init__(self, bucket_name: str | None = None):
-        self.bucket_name = bucket_name or setting.GCS_BUCKET_NAME
-        if not self.bucket_name:
-            raise ValueError("GCS_BUCKET_NAME is not configured in settings or environment.")
+        self._bucket_name = bucket_name
+        self._client = None
+        self._bucket = None
 
-        # Initialize storage client once per service instance
-        self.client = storage.Client(project=setting.GCP_PROJECT_ID)
-        self.bucket = self.client.bucket(self.bucket_name)
-        logfire.info(f"Initialized GCSService for bucket: {self.bucket_name}")
+    @property
+    def bucket_name(self) -> str:
+        name = self._bucket_name or setting.GCS_BUCKET_NAME or os.getenv("GCS_BUCKET_NAME")
+        if not name:
+            raise ValueError("GCS_BUCKET_NAME is not configured in settings or environment.")
+        return name
+
+    @property
+    def client(self) -> storage.Client:
+        if self._client is None:
+            project_id = setting.GCP_PROJECT_ID or os.getenv("GCP_PROJECT_ID")
+            self._client = storage.Client(project=project_id)
+        return self._client
+
+    @property
+    def bucket(self) -> storage.Bucket:
+        if self._bucket is None:
+            self._bucket = self.client.bucket(self.bucket_name)
+            logfire.info(f"Initialized GCSService for bucket: {self.bucket_name}")
+        return self._bucket
 
     def upload_file(
         self,

@@ -19,7 +19,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self.valid_keys = os.getenv("GATEWAY_API_KEYS", "").split(",")
         self.valid_keys = [key.strip() for key in self.valid_keys if key.strip()]
 
-        self.public_endpoints = ["/docs", "/redoc", "/openapi.json", "/health", "/auth/signup", "/auth/signin"]
+        self.public_endpoints = ["/", "/docs", "/redoc", "/openapi.json", "/health", "/favicon.ico", "/auth/signup", "/auth/signin"]
 
         self.jwt_secret = os.getenv("JWT_SECRET", "")
         self.jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
@@ -33,8 +33,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             self.jwt_algorithm = "HS256"
 
     async def dispatch(self, request, call_next):
-        # Skip public endpoints
-        if request.url.path in self.public_endpoints:
+        normalized_path = request.url.path.rstrip('/') or '/'
+        # Skip public endpoints and auth routes (signup/signin)
+        if request.url.path in self.public_endpoints or normalized_path in self.public_endpoints or normalized_path.startswith('/auth'):
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")

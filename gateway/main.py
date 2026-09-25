@@ -63,44 +63,36 @@ async def proxy_stream(full_path: str, request: Request):
     # Optionally remove Authorization if gateway handles auth only:
     # forward_headers.pop("authorization", None)
 
-    # Choose content generator (None for no body)
-    content_generator = None
-    if request.method not in ("GET", "HEAD", "OPTIONS") :
-        content_generator = _iter_request_body(request)
+    # Read request body for non-GET methods
+    body_bytes = await request.body()
+    content = body_bytes if request.method not in ("GET", "HEAD", "OPTIONS") and body_bytes else None
 
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         try:
-            # Use stream context to get response iteratively
-            async with client.stream(
+            resp = await client.request(
                 method=request.method,
                 url=backend_url,
                 headers=forward_headers,
-                content=content_generator,
-            ) as resp:
-                # Prepare response headers for client (strip hop-by-hop)
-                response_headers = _strip_hop_by_hop(dict(resp.headers))
-                content_type = resp.headers.get("content-type")
+                content=content,
+            )
+            response_headers = _strip_hop_by_hop(dict(resp.headers))
+            content_type = resp.headers.get("content-type")
 
-                logfire.info(
-                    f"gatewayservice: proxied {request.method} {request.url.path} -> {backend_url} (status={resp.status_code})"
-                )
+            logfire.info(
+                f"gatewayservice: proxied {request.method} {request.url.path} -> {backend_url} (status={resp.status_code})"
+            )
 
-                async def resp_generator():
-                    try:
-                        async for chunk in resp.aiter_bytes():
-                            if chunk:
-                                yield chunk
-                    except httpx.HTTPError as e:
-                        # If backend stream fails mid-stream, log and stop iteration
-                        logfire.error(f"gatewayservice: backend stream error: {e}", extra={"url": backend_url})
-                        return
-
-                return StreamingResponse(resp_generator(), status_code=resp.status_code, headers=response_headers, media_type=content_type)
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=response_headers,
+                media_type=content_type,
+            )
 
         except httpx.TimeoutException:
             logfire.warn(f"gatewayservice: backend request timed out -> {backend_url}")
             return Response(content="Gateway timeout", status_code=status.HTTP_504_GATEWAY_TIMEOUT)
         except httpx.HTTPError as e:
             logfire.error(f"gatewayservice: backend request failed: {e}", extra={"url": backend_url})
-            return Response(content="Bad gateway: {e}", status_code=status.HTTP_502_BAD_GATEWAY)
+            return Response(content=f"Bad gateway: {e}", status_code=status.HTTP_502_BAD_GATEWAY)
 

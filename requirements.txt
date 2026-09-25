@@ -5,6 +5,7 @@ requests
 numpy
 
 google-generativeai
+google-cloud-storage
 langchain-google-genai
 sentence-transformers
 

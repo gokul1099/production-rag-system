@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 import bcrypt
@@ -57,9 +57,9 @@ class SigninRequest(BaseModel):
 
 
 def create_access_token(subject: str, expires_delta: int | None = None) -> str:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=(expires_delta if expires_delta is not None else JWT_EXP_SECONDS))
-    payload = {"sub": str(subject), "iat": now.timestamp(), "exp": exp.timestamp()}
+    payload = {"sub": str(subject), "iat": int(now.timestamp()), "exp": int(exp.timestamp())}
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token
 
