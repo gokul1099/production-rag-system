@@ -1,0 +1,144 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  GAR_REPO: rag-repo
+
+jobs:
+  deploy:
+    name: Build & Deploy RAG Platform to Cloud Run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Step 1: Authenticate to Google Cloud using Workload Identity Federation (Keyless)
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      # Step 2: Set up Cloud SDK CLI
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Step 3: Configure Docker CLI to authenticate with GCP Artifact Registry
+      - name: Authorize Docker to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # -------------------------------------------------------------
+      # 1. BUILD & DEPLOY BACKEND API SERVICE (prod-rag-api)
+      # -------------------------------------------------------------
+      - name: Build & Push Backend API Image
+        run: |
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:latest"
+          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile .
+          docker push $IMAGE_URI
+          docker push $IMAGE_LATEST
+
+      - name: Deploy Backend API to Cloud Run
+        id: deploy-api
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: prod-rag-api
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:${{ github.sha }}
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=3
+            --port=8000
+          env_vars: |
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
+            LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_ALGORITHM=HS256
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            NVIDIA_API_KEY=${{ secrets.NVIDIA_API_KEY }}
+            QDRANT_CLUSTER_ENDPOINT=${{ secrets.QDRANT_CLUSTER_ENDPOINT }}
+            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+
+      # -------------------------------------------------------------
+      # 2. BUILD & DEPLOY GATEWAY SERVICE (prod-rag-gateway)
+      # -------------------------------------------------------------
+      - name: Build & Push Gateway Image
+        run: |
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:latest"
+          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile.gateway .
+          docker push $IMAGE_URI
+          docker push $IMAGE_LATEST
+
+      - name: Deploy Gateway to Cloud Run
+        id: deploy-gateway
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: prod-rag-gateway
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:${{ github.sha }}
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=3
+            --port=8001
+          env_vars: |
+            BACKEND_API_URL=${{ steps.deploy-api.outputs.url }}
+            LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_ALGORITHM=HS256
+            GATEWAY_RATE_LIMIT_REQUESTS=100
+            GATE_LIMIT_WINDOW_SECONDS=60
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+
+      # -------------------------------------------------------------
+      # 3. BUILD & DEPLOY STREAMLIT UI SERVICE (prod-rag-ui)
+      # -------------------------------------------------------------
+      - name: Build & Push Streamlit UI Image
+        run: |
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:latest"
+          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile.streamlit .
+          docker push $IMAGE_URI
+          docker push $IMAGE_LATEST
+
+      - name: Deploy Streamlit UI to Cloud Run
+        id: deploy-ui
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: prod-rag-ui
+          region: ${{ env.REGION }}
+          image: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:${{ github.sha }}
+          flags: >-
+            --allow-unauthenticated
+            --min-instances=0
+            --max-instances=3
+            --port=8501
+          env_vars: |
+            BACKEND_URL=${{ steps.deploy-gateway.outputs.url }}
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            QDRANT_CLUSTER_ENDPOINT=${{ secrets.QDRANT_CLUSTER_ENDPOINT }}
+            QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+            LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}

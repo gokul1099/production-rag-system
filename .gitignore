@@ -4,3 +4,6 @@
 **/*.py[cod]
 *.pyo
 *.pyd
+gcp-sa-key.json
+*.json.key
+
