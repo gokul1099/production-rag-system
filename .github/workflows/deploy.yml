@@ -61,6 +61,8 @@ jobs:
             --allow-unauthenticated
             --min-instances=0
             --max-instances=3
+            --memory=2Gi
+            --cpu=1
             --port=8000
           env_vars: |
             GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
@@ -98,6 +100,7 @@ jobs:
             --allow-unauthenticated
             --min-instances=0
             --max-instances=3
+            --memory=1Gi
             --port=8001
           env_vars: |
             BACKEND_API_URL=${{ steps.deploy-api.outputs.url }}
@@ -130,6 +133,7 @@ jobs:
             --allow-unauthenticated
             --min-instances=0
             --max-instances=3
+            --memory=1Gi
             --port=8501
           env_vars: |
             BACKEND_URL=${{ steps.deploy-gateway.outputs.url }}
