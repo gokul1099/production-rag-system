@@ -9,7 +9,9 @@ from starlette.responses import StreamingResponse
 from typing import Dict, AsyncIterator
 
 load_dotenv()
-logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), scrubbing=False)
+logfire_token = os.getenv("LOGFIRE_TOKEN")
+if logfire_token:
+    logfire.configure(token=logfire_token, scrubbing=False)
 
 
 app = FastAPI(title="Enterprise RAG gateway")

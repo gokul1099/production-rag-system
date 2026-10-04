@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 import tempfile
 load_dotenv()
-logfire.configure(token=os.getenv("LOGFIRE_TOKEN"), scrubbing=False)
+logfire_token = os.getenv("LOGFIRE_TOKEN")
+if logfire_token:
+    logfire.configure(token=logfire_token, scrubbing=False)
 import asyncio
 from fastapi import FastAPI, Response, UploadFile, File, Form, HTTPException, Request
 from app.agents.graph import rag_agent
