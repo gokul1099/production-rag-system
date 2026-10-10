@@ -59,7 +59,7 @@ async def handle_pubsub_ingest(request: Request):
         file_name = event_info.get("name")
 
         logfire.info(f"📥 Pub/Sub event received for file gcs://{bucket_name}/{file_name}")
-        if not file_name or not file_name.endswith("/"):
+        if not file_name or file_name.endswith("/"):
             return {"status": "ignored", "reason": "Directory object"}
         parts = file_name.split("/")
         source_type = parts[0] if len(parts) > 1 else "upload"

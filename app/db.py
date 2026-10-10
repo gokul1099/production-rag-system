@@ -18,12 +18,15 @@ else:
 
 
 def init_db():
-    if DATABASE_URL:
-        SQLModel.metadata.create_all(engine)
-        return
+    try:
+        if DATABASE_URL:
+            SQLModel.metadata.create_all(engine)
+            return
 
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    SQLModel.metadata.create_all(engine)
+        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        SQLModel.metadata.create_all(engine)
+    except Exception as e:
+        print(f"Warning: Failed to initialize database ({e}). Proceeding startup.")
 
 
 def get_session():
