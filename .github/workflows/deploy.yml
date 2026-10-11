@@ -11,44 +11,180 @@ env:
   GAR_REPO: rag-repo
 
 jobs:
-  deploy:
-    name: Build & Deploy RAG Platform to Cloud Run
+  # -------------------------------------------------------------
+  # 0. DETECT CHANGED FILES
+  # -------------------------------------------------------------
+  changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      gateway: ${{ steps.filter.outputs.gateway }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Paths Filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'app/**'
+              - 'Dockerfile'
+              - 'pyproject.toml'
+              - '.github/workflows/deploy.yml'
+            gateway:
+              - 'gateway/**'
+              - 'Dockerfile.gateway'
+              - 'pyproject.toml'
+              - '.github/workflows/deploy.yml'
+            ui:
+              - 'ui/**'
+              - 'Dockerfile.streamlit'
+              - 'pyproject.toml'
+              - '.github/workflows/deploy.yml'
+
+  # -------------------------------------------------------------
+  # 1. PARALLEL DOCKER BUILDS (RUNS ONLY IF SERVICE CODE CHANGED)
+  # -------------------------------------------------------------
+  build-api:
+    name: Build & Push Backend API Image
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     environment: prod
     permissions:
       contents: read
       id-token: write
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Step 1: Authenticate to Google Cloud using Workload Identity Federation (Keyless)
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      # Step 2: Set up Cloud SDK CLI
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      # Step 3: Configure Docker CLI to authenticate with GCP Artifact Registry
       - name: Authorize Docker to Artifact Registry
         run: |
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # -------------------------------------------------------------
-      # 1. BUILD & DEPLOY BACKEND API SERVICE (prod-rag-api)
-      # -------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build & Push Backend API Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-gateway:
+    name: Build & Push Gateway Image
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Authorize Docker to Artifact Registry
         run: |
-          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:${{ github.sha }}"
-          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:latest"
-          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile .
-          docker push $IMAGE_URI
-          docker push $IMAGE_LATEST
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Gateway Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.gateway
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-ui:
+    name: Build & Push Streamlit UI Image
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Authorize Docker to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Streamlit UI Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.streamlit
+          push: true
+          tags: |
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:${{ github.sha }}
+            ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------
+  # 2. DEPLOYMENTS (RUNS ONLY IF CORRESPONDING SERVICE CHANGED)
+  # -------------------------------------------------------------
+  deploy-api:
+    name: Deploy Backend API to Cloud Run
+    needs: [changes, build-api]
+    if: always() && needs.changes.outputs.api == 'true' && (needs.build-api.result == 'success')
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.deploy-api.outputs.url }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Deploy Backend API to Cloud Run
         id: deploy-api
@@ -78,16 +214,35 @@ jobs:
             QDRANT_CLUSTER_ENDPOINT=${{ secrets.QDRANT_CLUSTER_ENDPOINT }}
             QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
 
-      # -------------------------------------------------------------
-      # 2. BUILD & DEPLOY GATEWAY SERVICE (prod-rag-gateway)
-      # -------------------------------------------------------------
-      - name: Build & Push Gateway Image
+  deploy-gateway:
+    name: Deploy Gateway to Cloud Run
+    needs: [changes, build-gateway, deploy-api]
+    if: always() && needs.changes.outputs.gateway == 'true' && (needs.build-gateway.result == 'success') && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.deploy-gateway.outputs.url }}
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Backend API URL
+        id: get-api-url
         run: |
-          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:${{ github.sha }}"
-          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:latest"
-          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile.gateway .
-          docker push $IMAGE_URI
-          docker push $IMAGE_LATEST
+          API_URL="${{ needs.deploy-api.outputs.url }}"
+          if [ -z "$API_URL" ]; then
+            API_URL=$(gcloud run services describe prod-rag-api --region ${{ env.REGION }} --format 'value(status.url)')
+          fi
+          echo "url=$API_URL" >> $GITHUB_OUTPUT
 
       - name: Deploy Gateway to Cloud Run
         id: deploy-gateway
@@ -103,7 +258,7 @@ jobs:
             --memory=1Gi
             --port=8001
           env_vars: |
-            BACKEND_API_URL=${{ steps.deploy-api.outputs.url }}
+            BACKEND_API_URL=${{ steps.get-api-url.outputs.url }}
             LOGFIRE_TOKEN=${{ secrets.LOGFIRE_TOKEN }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             JWT_ALGORITHM=HS256
@@ -111,16 +266,33 @@ jobs:
             GATE_LIMIT_WINDOW_SECONDS=60
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
 
-      # -------------------------------------------------------------
-      # 3. BUILD & DEPLOY STREAMLIT UI SERVICE (prod-rag-ui)
-      # -------------------------------------------------------------
-      - name: Build & Push Streamlit UI Image
+  deploy-ui:
+    name: Deploy Streamlit UI to Cloud Run
+    needs: [changes, build-ui, deploy-gateway]
+    if: always() && needs.changes.outputs.ui == 'true' && (needs.build-ui.result == 'success') && (needs.deploy-gateway.result == 'success' || needs.deploy-gateway.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Gateway URL
+        id: get-gateway-url
         run: |
-          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:${{ github.sha }}"
-          IMAGE_LATEST="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:latest"
-          docker build -t $IMAGE_URI -t $IMAGE_LATEST -f Dockerfile.streamlit .
-          docker push $IMAGE_URI
-          docker push $IMAGE_LATEST
+          GW_URL="${{ needs.deploy-gateway.outputs.url }}"
+          if [ -z "$GW_URL" ]; then
+            GW_URL=$(gcloud run services describe prod-rag-gateway --region ${{ env.REGION }} --format 'value(status.url)')
+          fi
+          echo "url=$GW_URL" >> $GITHUB_OUTPUT
 
       - name: Deploy Streamlit UI to Cloud Run
         id: deploy-ui
@@ -136,7 +308,7 @@ jobs:
             --memory=1Gi
             --port=8501
           env_vars: |
-            BACKEND_URL=${{ steps.deploy-gateway.outputs.url }}
+            BACKEND_URL=${{ steps.get-gateway-url.outputs.url }}
             GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
             GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}

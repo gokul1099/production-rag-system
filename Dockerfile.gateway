@@ -5,8 +5,7 @@ WORKDIR /app
 
 # Environment
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONDONTWRITEBYTECODE=1 
 
 # Install system dependencies required by some Python packages
 RUN apt-get update && apt-get install -y \

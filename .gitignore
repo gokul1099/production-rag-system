@@ -6,4 +6,4 @@
 *.pyd
 gcp-sa-key.json
 *.json.key
-
+*.egg-info/
