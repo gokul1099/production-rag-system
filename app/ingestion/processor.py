@@ -36,23 +36,36 @@ def process_file(file_path: str, filename: str, source_type: str):
     with logfire.span("Processing file", file=filename, source=source_type):
         try:
             ext = filename.lower().rsplit(".", 1)[-1]
+            logfire.info(f"🔵 [FILE_PROCESS] File extension detected: .{ext}")
+
             if ext == "pdf":
+                logfire.info(f"🔵 [FILE_PROCESS] Parsing PDF file: {filename}")
                 full_text = parse_pdf(file_path)
             elif ext in ('html', 'htm'):
+                logfire.info(f"🔵 [FILE_PROCESS] Parsing HTML file: {filename}")
                 full_text = parse_html(file_path)
             elif ext == "txt":
+                logfire.info(f"🔵 [FILE_PROCESS] Parsing text file: {filename}")
                 full_text = parse_text(file_path)
             elif ext in ("docx", "pptx"):
+                logfire.info(f"🔵 [FILE_PROCESS] Parsing Office document: {filename}")
                 full_text = parse_office(file_path)
             else:
-                logfire.warning(f"Skipping unsupported file type: {filename}")
-                return
+                logfire.warning(f"⚠️ [FILE_PROCESS] Skipping unsupported file type: {filename} (.{ext})")
+                return False
+
             if not full_text or not full_text.strip():
-                logfire.warning(f"No text extracted from {filename} - skipping")
-                return
+                logfire.warning(f"⚠️ [FILE_PROCESS] No text extracted from {filename} - skipping")
+                return False
+
+            logfire.info(f"🔵 [FILE_PROCESS] Extracted text length: {len(full_text)} characters from {filename}")
             chunks = chunk_text(full_text)
+            logfire.info(f"🔵 [FILE_PROCESS] Text chunked into {len(chunks)} chunks")
+
             if not chunks:
-                return
+                logfire.warning(f"⚠️ [FILE_PROCESS] No chunks generated from {filename}")
+                return False
+
             processed_data = {
                 "filename": filename,
                 "source_type": source_type,
@@ -60,11 +73,16 @@ def process_file(file_path: str, filename: str, source_type: str):
             }
 
             local_path = save_processed_locally(processed_data, source_type, filename)
-            logfire.info(f"Saved processed data -> {local_path}")
+            logfire.info(f"🔵 [FILE_PROCESS] Saved processed data -> {local_path}")
 
             with logfire.span("Vectorizing & Indexing"):
+                logfire.info(f"🔵 [FILE_PROCESS] Ensuring Qdrant collection exists: {setting.QDRANT_COLLECTION}")
                 ensure_collection_exists(setting.QDRANT_COLLECTION)
+
+                logfire.info(f"🔵 [FILE_PROCESS] Generating embeddings for {len(chunks)} chunks")
                 embeddings = _embed_texts(chunks)
+                logfire.info(f"🔵 [FILE_PROCESS] Generated {len(embeddings)} embeddings")
+
                 points = [
                     models.PointStruct(
                         id=str(uuid.uuid4()),
@@ -78,34 +96,44 @@ def process_file(file_path: str, filename: str, source_type: str):
                     for chunk, vector in zip(chunks, embeddings)
                 ]
 
+                logfire.info(f"🔵 [FILE_PROCESS] Upserting {len(points)} points to Qdrant")
                 qdrant_client.upsert(
                     collection_name=setting.QDRANT_COLLECTION,
                     points=points
                 )
-                logfire.info(f"Indexed {len(points)} points to QDrant from {filename}")
+                logfire.info(f"✅ [FILE_PROCESS] Successfully indexed {len(points)} points to Qdrant from {filename}")
             return True
 
         except Exception as e:
-            logfire.info(f"Error during processing directory for {file_path} : {e}")
+            logfire.error(f"🔴 [FILE_PROCESS] Error during processing file {file_path}: {type(e).__name__}: {str(e)}", exc_info=True)
             return False
 
-def process_gcs_file(blob_name: str ,source_type: str = "upload"):
-    with logfire.span(f"Processing uploaded file from GCS for ingestion : {blob_name} - {source_type}"):
+def process_gcs_file(blob_name: str, source_type: str = "upload"):
+    with logfire.span(f"Processing uploaded file from GCS for ingestion: {blob_name} - {source_type}"):
         filename = Path(blob_name).name
         ext = Path(filename).suffix.lower()
         try:
+            logfire.info(f"🔵 [GCS_INGEST] Downloading file from GCS: {blob_name}")
             file_bytes = gcs_service.download_file_bytes(blob_name)
-            with tempfile.NamedTemporaryFile(suffix=ext, ) as temp_blob_bytes:
+            logfire.info(f"🔵 [GCS_INGEST] Downloaded {len(file_bytes)} bytes from GCS")
+
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as temp_blob_bytes:
                 temp_blob_bytes.write(file_bytes)
-                temp_blob_path = temp_blob_bytes.name()
+                temp_blob_bytes.flush()
+                temp_blob_path = temp_blob_bytes.name
+
+            logfire.info(f"🔵 [GCS_INGEST] Created temp file at {temp_blob_path}")
             try:
+                logfire.info(f"🔵 [GCS_INGEST] Starting file processing for {filename}")
                 processed = process_file(temp_blob_path, filename, source_type)
+                logfire.info(f"✅ [GCS_INGEST] File processing completed. Result: {processed}")
                 return processed
             finally:
                 if os.path.exists(temp_blob_path):
                     os.unlink(temp_blob_path)
+                    logfire.info(f"🔵 [GCS_INGEST] Cleaned up temp file: {temp_blob_path}")
         except Exception as e:
-            logfire.error(f"process_gcs_file - failed:  The ingestion failed due to {e}")
+            logfire.error(f"🔴 [GCS_INGEST] process_gcs_file failed for {blob_name}: {type(e).__name__}: {str(e)}", exc_info=True)
             return False
 
 
