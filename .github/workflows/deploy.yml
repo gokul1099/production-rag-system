@@ -40,12 +40,12 @@ jobs:
             gateway:
               - 'gateway/**'
               - 'Dockerfile.gateway'
-              - 'pyproject.toml'
+              - 'requirements-gateway.txt'
               - '.github/workflows/deploy.yml'
             ui:
               - 'ui/**'
               - 'Dockerfile.streamlit'
-              - 'pyproject.toml'
+              - 'requirements-ui.txt'
               - '.github/workflows/deploy.yml'
 
   # -------------------------------------------------------------
@@ -83,6 +83,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          provenance: false
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:${{ github.sha }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-api:latest
@@ -121,6 +122,7 @@ jobs:
           context: .
           file: Dockerfile.gateway
           push: true
+          provenance: false
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:${{ github.sha }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-gateway:latest
@@ -159,6 +161,7 @@ jobs:
           context: .
           file: Dockerfile.streamlit
           push: true
+          provenance: false
           tags: |
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:${{ github.sha }}
             ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/rag-ui:latest

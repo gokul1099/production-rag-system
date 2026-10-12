@@ -41,6 +41,8 @@ dependencies = [
 dev-api = "app.cli:run_api"
 dev-gateway = "app.cli:run_gateway"
 dev-ui = "app.cli:run_ui"
+dev-all = "app.cli:run_all"
+dev-docker = "app.cli:run_docker"
 
 [build-system]
 requires = ["setuptools>=61.0"]

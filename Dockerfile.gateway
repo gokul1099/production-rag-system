@@ -5,21 +5,13 @@ WORKDIR /app
 
 # Environment
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 
+    PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies required by some Python packages
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Copy lightweight requirements for layer caching
+COPY requirements-gateway.txt .
 
-# Copy pyproject first for layer caching
-COPY pyproject.toml .
-
-# Install Python dependencies declared in pyproject
-RUN pip install --upgrade pip && \
-    pip install .
+# Install minimal Gateway dependencies without compiling toolchain
+RUN pip install --no-cache-dir -r requirements-gateway.txt
 
 # Copy the application code
 COPY . .
