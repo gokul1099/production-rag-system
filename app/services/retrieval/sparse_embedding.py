@@ -1,5 +1,5 @@
 import logfire
-from fastembed.sparse_embedding import SparseTextEmbedding
+from fastembed import SparseTextEmbedding
 from qdrant_client.http import models
 
 _sparse_model = None
@@ -21,13 +21,10 @@ def compute_sparse_vectors(chunks: list[str]) -> list[models.SparseVector]:
         model = _init_sparse_model()
 
         sparse_vectors = []
-        sparse_embeddings = list(model.embed_documents(chunks))
-
-        for idx, sparse_embeddings in enumerate(sparse_embeddings):
-            indices, values = sparse_embeddings
+        for embedding in model.embed(chunks):
             sparse_vec = models.SparseVector(
-                indices=indices,
-                values=values
+                indices=embedding.indices.tolist(),
+                values=embedding.values.tolist()
             )
             sparse_vectors.append(sparse_vec)
 
