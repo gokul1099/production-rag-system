@@ -136,35 +136,46 @@ async def upload_files(file: UploadFile = File(...), session_id: str = Form(...)
 @app.post("/query")
 def query(request: QueryRequest):
      """
-     Excute the Langraph RAG flow with memory using a POST request
+     Execute the Langraph RAG flow with memory using a POST request
      """
      q = request.q
      thread_id = request.thread_id
+
+     logfire.info(f"🔵 [QUERY] Starting query processing - thread_id: {thread_id}")
+     logfire.info(f"🔵 [QUERY] User question: {q}")
 
      initial_state = {
          "messages": [{"role": "user", "content": q}],
          "current_query": q,
          "documents": [],
-         "plan":["start"],
-         "status":"Initializing Graph ..."
+         "plan": ["start"],
+         "status": "Initializing Graph ..."
      }
 
      config = {"configurable": {"thread_id": thread_id}}
      try:
+         logfire.info(f"🔵 [QUERY] Invoking RAG agent with thread_id: {thread_id}")
          final_output = rag_agent.invoke(initial_state, config=config)
+
+         logfire.info(f"🔵 [QUERY] RAG agent execution completed")
+         logfire.info(f"🔵 [QUERY] Final status: {final_output.get('status')}")
+         logfire.info(f"🔵 [QUERY] Documents retrieved: {len(final_output.get('documents', []))}")
+
+         answer = final_output.get("final_answer", "")
+         logfire.info(f"✅ [QUERY] Query processing complete - Answer length: {len(answer)} characters")
 
          return {
              "question": q,
-             "answer": final_output.get("final_answer"),
+             "answer": answer,
              "thought_process": final_output.get("plan"),
              "status": final_output.get("status"),
              "sources": final_output.get("documents", [])
          }
      except Exception as e:
-        logfire.error(f"❌ Backend execution failed: {e}")
+        logfire.error(f"🔴 [QUERY] Backend execution failed: {type(e).__name__}: {str(e)}", exc_info=True)
         return {
             "question": q,
-            "answer": "I apologize, but I encountered an internal error while procession your request",
+            "answer": "I apologize, but I encountered an internal error while processing your request",
             "thought_process": ["Error encountered during execution"],
             "status": "error",
             "sources": []

@@ -15,6 +15,8 @@ from app.ingestion.loaders.html import parse_html
 from app.ingestion.loaders.office import parse_office
 from app.ingestion.chunking.splitter import chunk_text
 from app.services.gcp.gcs_utils import gcs_service
+from app.services.retrieval.sparse_embedding import compute_sparse_vectors
+
 logfire.configure(service_name="enterprice-ingestion-service")
 
 clean_args = sys.argv[1:]
@@ -83,17 +85,22 @@ def process_file(file_path: str, filename: str, source_type: str):
                 embeddings = _embed_texts(chunks)
                 logfire.info(f"🔵 [FILE_PROCESS] Generated {len(embeddings)} embeddings")
 
+                logfire.info(f"🔵 [FILE_PROCESS] Generating sparse vectors for BM25")
+                sparse_vectors = compute_sparse_vectors(chunks)
+                logfire.info(f"🔵 [FILE_PROCESS] Generated {len(sparse_vectors)} sparse vectors")
+            
                 points = [
                     models.PointStruct(
                         id=str(uuid.uuid4()),
                         vector=vector,
+                        sparse_vector=sparse_vec,
                         payload={
                             "text": chunk,
                             "source": filename,
                             "source_type": source_type,
                         },
                     )
-                    for chunk, vector in zip(chunks, embeddings)
+                    for chunk, vector, sparse_vec in zip(chunks, embeddings, sparse_vectors)
                 ]
 
                 logfire.info(f"🔵 [FILE_PROCESS] Upserting {len(points)} points to Qdrant")

@@ -18,7 +18,7 @@ def generate_node(state: AgentState):
     user_msg = state["messages"][-1]["content"] if state["messages"] else ""
 
     if query == "CONVERSATIONAL":
-        logfire.info("Generating conversational response using memory")
+        logfire.info("🔵 [RESPONDER] Generating conversational response using memory")
         prompt = f"""
         You are a friendly and helpful Enterprise AI Assistant.
         Answer the user's latest message using the CONVERSATION HISTORY below.
@@ -29,19 +29,24 @@ def generate_node(state: AgentState):
         LATEST MESSAGE:
         "{user_msg}"
         """
-       
+
     else:
-        logfire.info("Generating technical RAG response")
+        logfire.info(f"🔵 [RESPONDER] Generating technical RAG response with {len(state['documents'])} documents")
         max_context_chars = 25000
         full_context = ""
 
-        for doc in state["documents"]:
+        if not state["documents"]:
+            logfire.warning("⚠️ [RESPONDER] No documents provided - generating response without context")
+
+        for idx, doc in enumerate(state["documents"]):
             if len(full_context) + len(doc) < max_context_chars:
-                full_context+=doc + "\n\n"
+                full_context += doc + "\n\n"
             else:
-                logfire.info("Context truncated to fit groq TPM limits")
+                logfire.info(f"🔵 [RESPONDER] Context truncated at document {idx} to fit token limits")
                 break
-        
+
+        logfire.info(f"🔵 [RESPONDER] Context prepared: {len(full_context)} characters from {len(state['documents'])} documents")
+
         prompt = f"""
         You are a Senior Technical Architect.
         Answer the question using the TECHNICAL CONTEXT provided.
@@ -58,8 +63,9 @@ def generate_node(state: AgentState):
 
     with logfire.span("Calling LLM with prompt"):
         try:
+            logfire.info(f"🔵 [RESPONDER] Invoking {setting.GROQ_MODEL} LLM")
             content = llm.invoke(prompt).content
-            logfire.info("✅Response Synthesised via LLM")
+            logfire.info(f"✅ [RESPONDER] Response synthesized via LLM ({len(content)} characters)")
 
             return {
                 "final_answer": content,
@@ -68,7 +74,13 @@ def generate_node(state: AgentState):
                 "messages": [{"role": "assistant", "content": content}]
             }
         except Exception as e:
-            logfire.error(f"LLM Generation failed: {e}")
+            logfire.error(f"🔴 [RESPONDER] LLM generation failed: {type(e).__name__}: {str(e)}", exc_info=True)
+            return {
+                "final_answer": f"I encountered an error while generating a response: {str(e)}",
+                "status": "Error in response generation",
+                "plan": state["plan"] + ["Error in LLM"],
+                "messages": [{"role": "assistant", "content": f"Error: {str(e)}"}]
+            }
             
 
 

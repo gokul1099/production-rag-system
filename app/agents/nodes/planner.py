@@ -34,17 +34,21 @@ def planner_node(state: AgentState):
     """
 
     with logfire.span("Planner Decision"):
+        logfire.info(f"🔵 [PLANNER] Analyzing user intent...")
         decision = llm.invoke(prompt).content.strip()
-        logfire.info(f"Intent identifier: {decision}")
+        logfire.info(f"🔵 [PLANNER] Intent decision: {decision}")
 
     if decision == "CONVERSATIONAL":
+        logfire.info(f"🔵 [PLANNER] Routing to conversational mode (using memory)")
         return {
             "current_query": "CONVERSATIONAL",
             "status": "Handling Conversationaly using memory",
             "plan":["Intent: Conversational/Memory", "Retrieval: Skipped"]
         }
-    return{
+
+    logfire.info(f"🔵 [PLANNER] Routing to technical retrieval mode with query: {decision}")
+    return {
         "current_query": decision,
-        "status":f"Technical research needed. Searching for: {decision}",
+        "status": f"Technical research needed. Searching for: {decision}",
         "plan": ["Intent: Technical", f"Search Term: {decision}"]
     }
